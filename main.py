@@ -4,26 +4,18 @@ import asyncio
 import sqlite3
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
-from aiogram.utils.markdown import hbold
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from google import genai
 from google.genai import types as ai_types
 from dotenv import load_dotenv
 
-# PDF va Word yaratish uchun kutubxonalar
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
-from docx import Document
-
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 AI_API_KEY = os.getenv("GEMINI_API_KEY")
-ADMIN_ID = 8407085035  # Bu yerga o'zingizning Telegram ID raqamingizni yozing
+ADMIN_ID = 8407085035 # Sizning Telegram ID raqamingiz
 
 if not TOKEN or not AI_API_KEY:
     raise ValueError("XATOLIK: .env faylida tokenlar to'liq emas!")
@@ -32,7 +24,7 @@ client = genai.Client(api_key=AI_API_KEY)
 dp = Dispatcher()
 
 # Ma'lumotlar bazasini sozlash
-conn = sqlite3.connect("users_v3.db", check_same_thread=False)
+conn = sqlite3.connect("oqituvchi_users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
@@ -54,14 +46,13 @@ conn.commit()
 class BotStates(StatesGroup):
     waiting_for_ad = State()
 
-SYSTEM_PROMPT = "SEN “O‘QITUVCHI AI” NOMLI PROFESSIONAL SUN’IY INTELLEKT YORDAMCHISISAN. BERILGAN SAVOLLARGA ANIQ VA TUSHUNARLI JAVOB BER."
+SYSTEM_PROMPT = "Sen O‘qituvchi AI nomli professional sun'iy intellekt yordamchisisan. Berilgan savollarga aniq, tushunarli va chiroyli javob ber. Hech qanday ortiqcha yulduzcha (*) yoki xunuk teglarni ishlatma."
 
-# Asosiy menyu tugmalari
+# Asosiy menyu
 def get_main_keyboard(user_id):
     buttons = [
         [KeyboardButton(text="📝 Test / Quiz yaratish"), KeyboardButton(text="📚 Referat / Insho yozish")],
         [KeyboardButton(text="🧮 Matematika & Masalalar"), KeyboardButton(text="💡 AI Ustozdan so'rash")],
-        [KeyboardButton(text="📄 PDF yuklab olish"), KeyboardButton(text="📝 Word (Docx) yuklab olish")],
         [KeyboardButton(text="🔄 Tarixni tozalash")]
     ]
     if user_id == ADMIN_ID:
@@ -79,31 +70,7 @@ def get_admin_keyboard():
         resize_keyboard=True
     )
 
-# PDF yaratish funksiyasi
-def create_pdf(text, filename="Oqituvchi_AI.pdf"):
-    doc = SimpleDocTemplate(filename, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('PDFTitle', parent=styles['Heading1'], fontSize=20, leading=24, alignment=TA_CENTER, spaceAfter=20, textColor="#1A237E")
-    body_style = ParagraphStyle('PDFBody', parent=styles['Normal'], fontSize=12, leading=18, alignment=TA_JUSTIFY, spaceAfter=10)
-    story = [Paragraph("<b>“O‘QITUVCHI AI” RESURSI</b>", title_style), Spacer(1, 15)]
-    for line in text.split("\n"):
-        if line.strip():
-            clean_line = line.replace("**", "<b>").replace("__", "<i>")
-            story.append(Paragraph(clean_line, body_style))
-    doc.build(story)
-    return filename
-
-# Word yaratish funksiyasi
-def create_word(text, filename="Oqituvchi_AI.docx"):
-    doc = Document()
-    doc.add_heading("“O‘QITUVCHI AI” TAQDIM ETADI", level=1)
-    for line in text.split("\n"):
-        if line.strip():
-            doc.add_paragraph(line.replace("**", "").replace("__", ""))
-    doc.save(filename)
-    return filename
-
-# Start buyrug'i
+# /start buyrug'i
 @dp.message(CommandStart())
 async def command_start_handler(message: types.Message) -> None:
     user_id = message.from_user.id
@@ -114,14 +81,13 @@ async def command_start_handler(message: types.Message) -> None:
     welcome_text = (
         f"Assalomu alaykum, hurmatli {message.from_user.full_name}!\n\n"
         f"Men — O‘QITUVCHI AI professional sun'iy intellekt yordamchisiman.\n\n"
-        f"Men sizga quyidagi ishlarda yaqindan ko'maklasha olaman:\n"
-        f"• Istalgan mavzuda mukammal Test va Quizlar yaratish\n"
+        f"Sizga quyidagi ishlarda yordam bera olaman:\n"
+        f"• Istalgan mavzuda Test va Quizlar yaratish\n"
         f"• Sifatli Referat, Insho va Esse yozish\n"
-        f"• Matematika, Mantiq va Buxgalteriya masalalarini yechish\n"
-        f"• Ingliz va Rus tillarini o'rganish va matnlarni tarjima qilish\n"
-        f"• Tayyor ma'lumotlarni PDF yoki Word (Docx) formatida yuklab olish\n\n"
-        f"Hatto menga daftaringizdagi qiyin misollarni rasmga olib tashlasangiz ham yechib bera olaman!\n\n"
-        f"Boshlash uchun pastdagi menyudan o'zingizga kerakli bo'limni tanlang:"
+        f"• Matematika, Mantiq va qiyin masalalarni yechish\n"
+        f"• Ingliz va Rus tillari bo'yicha savollarga javob berish\n\n"
+        f"Hatto menga misollarni rasmga olib tashlasangiz ham yechib bera olaman!\n\n"
+        f"Boshlash uchun pastdagi menyudan kerakli bo'limni tanlang:"
     )
     await message.answer(welcome_text, reply_markup=get_main_keyboard(user_id))
 
@@ -171,14 +137,14 @@ async def photo_handler(message: types.Message):
         if os.path.exists(destination):
             os.remove(destination)
 
-# Umumiy xabarlar va Admin panel boshqaruvi
+# Xabarlar va Admin panel
 @dp.message()
 async def main_handler(message: types.Message, state: FSMContext) -> None:
     user_text = message.text
     user_id = message.from_user.id
     
     if user_text == "⚙️ Admin Panel" and user_id == ADMIN_ID:
-        await message.answer("Admin panel:", reply_markup=get_admin_keyboard())
+        await message.answer("Admin panel bo'limi:", reply_markup=get_admin_keyboard())
         return
     elif user_text == "📊 Foydalanuvchilar statistikasi" and user_id == ADMIN_ID:
         cursor.execute("SELECT COUNT(*) FROM users")
@@ -206,28 +172,11 @@ async def main_handler(message: types.Message, state: FSMContext) -> None:
         await state.clear()
         return
 
-    if user_text in ["📄 PDF yuklab olish", "📝 Word (Docx) yuklab olish"]:
-        cursor.execute("SELECT text FROM history WHERE user_id = ? AND role = 'model' ORDER BY id DESC LIMIT 1", (user_id,))
-        last_row = cursor.fetchone()
-        if not last_row:
-            await message.answer("Avval biron bir mavzuda ma'lumot so'rang.")
-            return
-            
-        last_response = last_row[0]
-        if "PDF" in user_text:
-            file_path = create_pdf(last_response)
-            await message.answer_document(document=FSInputFile(file_path), caption="Tayyor PDF hujjat.")
-        else:
-            file_path = create_word(last_response)
-            await message.answer_document(document=FSInputFile(file_path), caption="Tayyor Word hujjat.")
-        os.remove(file_path)
-        return
-
     if user_text in ["📝 Test / Quiz yaratish", "📚 Referat / Insho yozish", "🧮 Matematika & Masalalar", "💡 AI Ustozdan so'rash"]:
         await message.answer(f"Siz '{user_text}' bo'limini tanladingiz. Mavzu yoki savolingizni batafsil yozib yuboring:")
         return
 
-    # Sun'iy intellekt javobi va xotira (kontekst) qismi
+    # AI javob berish tizimi
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
     
     cursor.execute("SELECT role, text FROM history WHERE user_id = ? ORDER BY id DESC LIMIT 6", (user_id,))
