@@ -58,7 +58,7 @@ def get_main_keyboard(user_id):
         [KeyboardButton(text="📄 PDF formatida yuklab olish")]
     ]
     # Agar foydalanuvchi admin bo'lsa, unga qo'shimcha Admin Panel tugmasini chiqaramiz
-    if user_id == 8407085035:
+    if user_id == ADMIN_ID:
         buttons.append([KeyboardButton(text="⚙️ Admin Panel")])
         
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
