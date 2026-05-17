@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-AI_API_KEY = os.getenv("GEMINI_API_KEY")
+AI_API_KEY = os.getenv("AIzaSyA5zam1PyP53aRo_o4ucy4azbF2vJ-F2c8")
 ADMIN_ID = 8407085035  # O'zingizning Telegram ID raqamingizni yozing
 
 if not TOKEN or not AI_API_KEY:
