@@ -15,7 +15,7 @@ load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 AI_API_KEY = os.getenv("GEMINI_API_KEY")
-ADMIN_ID = 8407085035 # Sizning Telegram ID raqamingiz
+ADMIN_ID = 8407085035  # Sizning Telegram ID raqamingiz
 
 if not TOKEN or not AI_API_KEY:
     raise ValueError("XATOLIK: .env faylida tokenlar to'liq emas!")
@@ -23,7 +23,7 @@ if not TOKEN or not AI_API_KEY:
 client = genai.Client(api_key=AI_API_KEY)
 dp = Dispatcher()
 
-# Ma'lumotlar bazasini sozlash
+# Ma'lumotlar bazasini sozlash (Faqat foydalanuvchilar uchun, tarix kerak emas)
 conn = sqlite3.connect("oqituvchi_users.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -33,14 +33,6 @@ cursor.execute("""
         full_name TEXT
     )
 """)
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        role TEXT,
-        text TEXT
-    )
-""")
 conn.commit()
 
 class BotStates(StatesGroup):
@@ -48,12 +40,11 @@ class BotStates(StatesGroup):
 
 SYSTEM_PROMPT = "Sen O‘qituvchi AI nomli professional sun'iy intellekt yordamchisisan. Berilgan savollarga aniq, tushunarli va chiroyli javob ber. Hech qanday ortiqcha yulduzcha (*) yoki xunuk teglarni ishlatma."
 
-# Asosiy menyu
+# Asosiy menyu (Tarixni tozalash tugmasi olib tashlandi)
 def get_main_keyboard(user_id):
     buttons = [
         [KeyboardButton(text="📝 Test / Quiz yaratish"), KeyboardButton(text="📚 Referat / Insho yozish")],
-        [KeyboardButton(text="🧮 Matematika & Masalalar"), KeyboardButton(text="💡 AI Ustozdan so'rash")],
-        [KeyboardButton(text="🔄 Tarixni tozalash")]
+        [KeyboardButton(text="🧮 Matematika & Masalalar"), KeyboardButton(text="💡 AI Ustozdan so'rash")]
     ]
     if user_id == ADMIN_ID:
         buttons.append([KeyboardButton(text="⚙️ Admin Panel")])
@@ -91,13 +82,6 @@ async def command_start_handler(message: types.Message) -> None:
     )
     await message.answer(welcome_text, reply_markup=get_main_keyboard(user_id))
 
-# Tarixni tozalash
-@dp.message(F.text == "🔄 Tarixni tozalash")
-async def clear_history(message: types.Message):
-    cursor.execute("DELETE FROM history WHERE user_id = ?", (message.from_user.id,))
-    conn.commit()
-    await message.answer("Suhbatimiz tarixi tozalandi! Endi yangi mavzuda gaplashishimiz mumkin.")
-
 # Rasm qabul qilish
 @dp.message(F.photo)
 async def photo_handler(message: types.Message):
@@ -124,13 +108,7 @@ async def photo_handler(message: types.Message):
             ],
             config=ai_types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
         )
-        ai_reply = response.text
-        
-        cursor.execute("INSERT INTO history (user_id, role, text) VALUES (?, ?, ?)", (user_id, 'user', f"[Rasm]: {caption}"))
-        cursor.execute("INSERT INTO history (user_id, role, text) VALUES (?, ?, ?)", (user_id, 'model', ai_reply))
-        conn.commit()
-        
-        await message.answer(ai_reply)
+        await message.answer(response.text)
     except Exception as e:
         await message.answer(f"Xatolik yuz berdi: {e}")
     finally:
@@ -176,30 +154,16 @@ async def main_handler(message: types.Message, state: FSMContext) -> None:
         await message.answer(f"Siz '{user_text}' bo'limini tanladingiz. Mavzu yoki savolingizni batafsil yozib yuboring:")
         return
 
-    # AI javob berish tizimi
+    # Toza va mustaqil AI javob berish tizimi
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
-    
-    cursor.execute("SELECT role, text FROM history WHERE user_id = ? ORDER BY id DESC LIMIT 6", (user_id,))
-    rows = cursor.fetchall()[::-1]
-    
-    contents = []
-    for r in rows:
-        contents.append(ai_types.Content(role=r[0], parts=[ai_types.Part.from_text(text=r[1])]))
-    contents.append(ai_types.Content(role="user", parts=[ai_types.Part.from_text(text=user_text)]))
     
     try:
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=contents,
+            contents=user_text,
             config=ai_types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
         )
-        ai_reply = response.text
-        
-        cursor.execute("INSERT INTO history (user_id, role, text) VALUES (?, ?, ?)", (user_id, 'user', user_text))
-        cursor.execute("INSERT INTO history (user_id, role, text) VALUES (?, ?, ?)", (user_id, 'model', ai_reply))
-        conn.commit()
-        
-        await message.answer(ai_reply)
+        await message.answer(response.text)
     except Exception as e:
         logging.error(f"Xatolik: {e}")
         await message.answer("Kechirasiz, xatolik yuz berdi. Qayta urinib ko'ring.")
