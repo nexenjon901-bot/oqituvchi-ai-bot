@@ -2,14 +2,12 @@ import os
 import logging
 import asyncio
 import sqlite3
-import re
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from google import genai
-from google.genai import types as ai_types
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,11 +19,12 @@ ADMIN_ID = 8407085035  # O'zingizning Telegram ID raqamingizni yozing
 if not TOKEN or not AI_API_KEY:
     raise ValueError("XATOLIK: .env faylida tokenlar to'liq emas!")
 
+# Barqaror AI mijozini ulash
 client = genai.Client(api_key=AI_API_KEY)
 dp = Dispatcher()
 
 # Ma'lumotlar bazasini sozlash
-conn = sqlite3.connect("oqituvchi_premium_v4.db", check_same_thread=False)
+conn = sqlite3.connect("oqituvchi_final.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
@@ -40,35 +39,17 @@ class BotStates(StatesGroup):
     waiting_for_ad = State()
 
 SYSTEM_PROMPT = """
-Siz dunyo darajasidagi "O‘QITUVCHI AI" (World-Class Teacher, Senior Mentor, Productivity Coach, Professional Guide) yordamchisiz.
-Asosiy maqsad: Foydalanuvchilarni chalkash boshlovchidan bilimli, intizomli, produktiv va muvaffaqiyatli inson darajasiga olib chiqish.
+Siz dunyo darajasidagi "O‘QITUVCHI AI" (Senior Mentor, Productivity Coach, Professional Guide) yordamchisiz.
+Asosiy maqsad: Foydalanuvchilarni bilimli, intizomli va muvaffaqiyatli inson darajasiga olib chiqish.
 
 JAVOB BERISH USLUBI:
-- Har doim toza format, sarlavhalar va bullet pointlardan foydalaning.
-- Javoblar aniq, tartibli, juda uzun bo'lmagan va insondek tabiiy bo'lsin. Robotga o'xshash quruq gaplardan qoching.
-- Emoji'larni professional va juda kam ishlating.
-- Har doim foydalanuvchini harakatga undang (action), keyingi qadamni ko'rsating (next step) va motivatsiya bering.
-
-STARTUP MENTOR REJIMI:
-- Startup g'oyalar topish, validatsiya, MVP qurish, branding, monetizatsiya, marketing va o'sish strategiyalarida amaliy strategiyalar bering.
-- Eng samarali AI vositalarini tavsiya qiling.
-
-TIL QOIDASI:
-- Har doim foydalanuvchi yozgan tilda javob bering (O'zbekcha bo'lsa -> o'zbekcha, Inglizcha bo'lsa -> inglizcha).
-
-XAVFSIZLIK:
-- Hech qachon zararli, noqonuniy yoki axloqsiz maslahatlar bermang. Faqat educational va foydali bo'ling.
+- Matnda mutlaqo yulduzcha (*), qalinlashtirish (**) yoki xunuk teglarni ishlatmang. Oddiy va toza matn yuboring.
+- Har doim sarlavhalar va qator tashlashlardan foydalaning.
+- Foydalanuvchi qaysi tilda yozsa, faqat o'sha tilda insondek tabiiy javob bering.
+- Javob oxirida doim keyingi qadamni ko'rsating va motivatsiya bering.
 """
 
-def clean_markdown(text: str) -> str:
-    """Telegramda xatolik bermasligi uchun matndagi barcha xunuk markdown belgilarni tozalash"""
-    if not text:
-        return ""
-    # Ortiqcha yulduzcha va teglarni oddiy matnga aylantirish
-    text = text.replace("**", "").replace("*", "").replace("`", "")
-    return text.strip()
-
-# Tugmalardan "Tarixni tozalash" butunlay olib tashlandi
+# Asosiy menyu tugmalari
 def get_main_keyboard(user_id):
     buttons = [
         [KeyboardButton(text="📝 Test / Quiz yaratish"), KeyboardButton(text="📚 Referat / Insho yozish")],
@@ -89,6 +70,7 @@ def get_admin_keyboard():
         resize_keyboard=True
     )
 
+# /start buyrug'i
 @dp.message(CommandStart())
 async def command_start_handler(message: types.Message) -> None:
     user_id = message.from_user.id
@@ -98,17 +80,16 @@ async def command_start_handler(message: types.Message) -> None:
     
     welcome_text = (
         f"Assalomu alaykum, hurmatli {message.from_user.full_name}!\n\n"
-        f"Men — O‘QITUVCHI AI professional sun'iy intellekt ekotizimiga xush kelibsiz.\n\n"
+        f"Men — O‘QITUVCHI AI professional sun'iy intellekt yordamchisiman.\n\n"
         f"Sizga quyidagi yo'nalishlarda professional yordam bera olaman:\n"
-        f"• Ta'lim: Testlar, insholar, referatlar va tillar o'rganish\n"
-        f"• Biznes: Startup g'oyalar, MVP qurish va marketing strategiyalari\n"
-        f"• Fayllar: PDF, rasm va hujjatlarni tahlil qilish va xulosalash\n"
-        f"• Ovoz: Ovozli savollarga insondek tabiiy javob olish\n\n"
-        f"Keling, hoziroq boshlaymiz. Quyidagi menyudan o'zingizga kerakli bo'limni tanlang:"
+        f"• Ta'lim: Testlar, insholar va referatlar tayyorlash\n"
+        f"• Biznes: Startup g'oyalar va marketing strategiyalari\n"
+        f"• Fayllar va Ovoz: Rasm va ovozli xabarlarni tahlil qilish\n\n"
+        f"Boshlash uchun pastdagi menyudan kerakli bo'limni tanlang:"
     )
     await message.answer(welcome_text, reply_markup=get_main_keyboard(user_id))
 
-# AI FILE ANALYZER (Rasm tahlili)
+# Rasm va Skrinshot tahlili
 @dp.message(F.photo)
 async def photo_handler(message: types.Message):
     user_id = message.from_user.id
@@ -119,7 +100,7 @@ async def photo_handler(message: types.Message):
     destination = f"photo_{user_id}.jpg"
     await message.bot.download_file(file_info.file_path, destination)
     
-    caption = message.caption if message.caption else "Ushbu faylni tahlil qil, tushuntir va asosiy g'oyalarini chiqarib soddalashtir."
+    caption = message.caption if message.caption else "Ushbu rasm yoki skrinshotni tahlil qil va tushuntir."
     await message.answer("📥 Tasvir qabul qilindi. AI tahlil qilmoqda...")
     
     try:
@@ -129,53 +110,21 @@ async def photo_handler(message: types.Message):
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=[
-                ai_types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                {"mime_type": "image/jpeg", "data": image_bytes},
                 caption
             ],
-            config=ai_types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
+            config={"system_instruction": SYSTEM_PROMPT}
         )
-        await message.answer(clean_markdown(response.text))
+        # Matnni tozalab yuborish
+        clean_text = response.text.replace("**", "").replace("*", "").replace("`", "")
+        await message.answer(clean_text)
     except Exception as e:
-        await message.answer(f"Xatolik yuz berdi: {e}")
+        await message.answer("Tasvirni tahlil qilishda xatolik bo'ldi.")
     finally:
         if os.path.exists(destination):
             os.remove(destination)
 
-# AI FILE ANALYZER (PDF tahlili)
-@dp.message(F.document)
-async def document_handler(message: types.Message):
-    user_id = message.from_user.id
-    file_name = message.document.file_name
-    
-    await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
-    await message.answer(f"📥 {file_name} qabul qilindi. AI hujjatni tahlil qilmoqda...")
-    
-    file_info = await message.bot.get_file(message.document.file_id)
-    destination = f"doc_{user_id}_{file_name}"
-    await message.bot.download_file(file_info.file_path, destination)
-    
-    try:
-        with open(destination, "rb") as f:
-            doc_bytes = f.read()
-            
-        mime_type = "application/pdf" if file_name.lower().endswith('.pdf') else "text/plain"
-        
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[
-                ai_types.Part.from_bytes(data=doc_bytes, mime_type=mime_type),
-                "Ushbu hujjatni tahlil qil, qisqacha mazmunini yoz, asosiy g'oyalarni chiqar va soddalashtirib tushuntir."
-            ],
-            config=ai_types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
-        )
-        await message.answer(clean_markdown(response.text))
-    except Exception as e:
-        await message.answer("Hujjatni tahlil qilishda xatolik bo'ldi. PDF formatida yuborib ko'ring.")
-    finally:
-        if os.path.exists(destination):
-            os.remove(destination)
-
-# AI VOICE MODE (Ovozli xabarlar)
+# Ovozli xabarlar tahlili
 @dp.message(F.voice)
 async def voice_handler(message: types.Message):
     user_id = message.from_user.id
@@ -192,24 +141,26 @@ async def voice_handler(message: types.Message):
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=[
-                ai_types.Part.from_bytes(data=voice_bytes, mime_type="audio/ogg"),
-                "Foydalanuvchining ovozli savolini tingla va unga juda tabiiy, insondek va professional javob ber. Agar inglizcha gapirgan bo'lsa talaffuz mashqlariga yordam ber."
+                {"mime_type": "audio/ogg", "data": voice_bytes},
+                "Ovozli xabarni eshitib, unga juda tabiiy va professional javob qaytar."
             ],
-            config=ai_types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
+            config={"system_instruction": SYSTEM_PROMPT}
         )
-        await message.answer(clean_markdown(response.text))
+        clean_text = response.text.replace("**", "").replace("*", "").replace("`", "")
+        await message.answer(clean_text)
     except Exception as e:
-        await message.answer("Ovozli xabarni tahlil qilishda xatolik yuz berdi.")
+        await message.answer("Ovozli xabarni tahlil qilishda xatolik bo'ldi.")
     finally:
         if os.path.exists(destination):
             os.remove(destination)
 
-# Matnli xabarlar boshqaruvi
+# Matnli xabarlar va menyu boshqaruvi
 @dp.message()
 async def main_handler(message: types.Message, state: FSMContext) -> None:
     user_text = message.text
     user_id = message.from_user.id
     
+    # Admin boshqaruvi
     if user_text == "⚙️ Admin Panel" and user_id == ADMIN_ID:
         await message.answer("Admin panel bo'limi:", reply_markup=get_admin_keyboard())
         return
@@ -225,6 +176,7 @@ async def main_handler(message: types.Message, state: FSMContext) -> None:
         await message.answer("Bosh menyu:", reply_markup=get_main_keyboard(user_id))
         return
 
+    # Reklama yuborish qismi
     current_state = await state.get_state()
     if current_state == BotStates.waiting_for_ad.state and user_id == ADMIN_ID:
         cursor.execute("SELECT user_id FROM users")
@@ -232,33 +184,36 @@ async def main_handler(message: types.Message, state: FSMContext) -> None:
         for u in users:
             try: await message.copy_to(chat_id=u[0]); await asyncio.sleep(0.05)
             except: pass
-        await message.answer("Xabar barcha foydalanuvchilarga tarqatildi.", reply_markup=get_admin_keyboard())
+        await message.answer("Xabar tarqatildi.", reply_markup=get_admin_keyboard())
         await state.clear()
         return
 
+    # Bo'lim eslatmalari
     if user_text in ["📝 Test / Quiz yaratish", "📚 Referat / Insho yozish", "🧮 Matematika & Masalalar"]:
         await message.answer(f"Siz '{user_text}' bo'limini tanladingiz. Mavzu yoki savolingizni batafsil yozib yuboring:")
         return
     elif user_text == "🚀 AI Startup Mentor":
-        await message.answer("🚀 AI Startup Mentor bo'limiga xush kelibsiz!\n\nMen sizga yangi g'oya topish, MVP qurish, marketing, monetizatsiya va o'sish strategiyalarini tuzishda senior mentor sifatidagi amaliy tavsiyalar beraman.\n\nG'oyangiz yoki startapingiz haqida yozing, keyingi qadamlarni rejalashtiramiz:")
+        await message.answer("🚀 AI Startup Mentor bo'limiga xush kelibsiz!\nG'oyangiz yoki startapingiz haqida yozing, men sizga bosqichma-bosqich amaliy strategiya tuzib beraman:")
         return
     elif user_text == "💡 AI Ustozdan so'rash":
-        await message.answer("Menga istalgan savolingizni yo'llang. Sizga eng toza va tushunarli formatda javob beraman:")
+        await message.answer("Menga istalgan savolingizni yo'llang, eng toza va tushunarli formatda javob beraman:")
         return
 
-    # Matnli AI so'rov qismi
+    # Toza va xatosiz matnli AI so'rovi
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
     
     try:
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=user_text,
-            config=ai_types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
+            config={"system_instruction": SYSTEM_PROMPT}
         )
-        await message.answer(clean_markdown(response.text))
+        # Barcha xato beruvchi markdown belgilarini tozalash
+        clean_reply = response.text.replace("**", "").replace("*", "").replace("`", "")
+        await message.answer(clean_reply)
     except Exception as e:
         logging.error(f"Xatolik: {e}")
-        await message.answer("Kechirasiz, tizimda muammo bo'ldi. Qayta urinib ko'ring.")
+        await message.answer("Kechirasiz, hozir javob berishda muammo bo'ldi. Qayta urinib ko'ring.")
 
 async def main() -> None:
     bot = Bot(token=TOKEN)
