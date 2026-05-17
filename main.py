@@ -105,8 +105,31 @@ def create_word(text, filename="Oqituvchi_AI.docx"):
 @dp.message(CommandStart())
 async def command_start_handler(message: types.Message) -> None:
     user_id = message.from_user.id
+    
+    # Foydalanuvchini bazaga qo'shish
     cursor.execute("INSERT OR IGNORE INTO users (user_id, username, full_name) VALUES (?, ?, ?)", 
-                   (user_id, message.from_user.username, message.from_user.full_name))
+                   (user_id, message.from_user.username, message.from_user.full_name)) 
+    conn.commit()
+    
+    # Yangi va chiroyli salomlashish matni
+    welcome_text = (
+        f"👋 **Assalomu alaykum, hurmatli {message.from_user.full_name}!**\n\n"
+        f"🤖 Men — **“O‘QITUVCHI AI”** professional sun'iy intellekt yordamchisiman.\n\n"
+        f"📚 Men sizga quyidagi ishlarda yaqindan ko'maklasha olaman:\n"
+        f"▪️ Istalgan mavzuda mukammal **Test va Quizlar** yaratish\n"
+        f"▪️ Sifatli **Referat, Insho va Esse** yozish\n"
+        f"▪️ **Matematika, Mantiq va Buxgalteriya** masalalarini yechish\n"
+        f"▪️ **Ingliz va Rus tillarini** o'rganish va matnlarni tarjima qilish\n"
+        f"▪️ Tayyor ma'lumotlarni **PDF yoki Word (Docx)** formatida yuklab olish\n\n"
+        f"📸 Hatto menga daftaringizdagi qiyin misollarni **rasmga olib tashlasangiz ham** yechib bera olaman!\n\n"
+        f"👇 *Boshlash uchun pastdagi menyudan o'zingizga kerakli bo'limni tanlang:* "
+    )
+    
+    await message.answer(
+        welcome_text, 
+        parse_mode="Markdown", 
+        reply_markup=get_main_keyboard(user_id)
+    )
     conn.commit()
     await message.answer(f"Assalomu alaykum, {hbold(message.from_user.full_name)}! Men yangilangan va tezkor **“O‘QITUVCHI AI”** botiman. Savolingizni matn yoki rasm ko'rinishida yuborishingiz mumkin:", reply_markup=get_main_keyboard(user_id))
 
